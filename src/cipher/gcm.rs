@@ -135,6 +135,9 @@ impl<K: Key, E: Fn(&[u8; GCM_BLK_SIZE], &K) -> [u8; GCM_BLK_SIZE]> AEAD for GCM<
 
     fn encrypt(&self, plaintext: &Self::Input, iv: &Self::Input) -> Self::Output {
         type T = LeIntArr<u32, OPQAUE_UINT_LEN>;
+        if plaintext.len() == 0 {
+            return Vec::new();
+        }
         let mut ciphertext: Vec<u8> = Vec::with_capacity(plaintext.len());
         let n = plaintext.len().div_ceil(GCM_BLK_SIZE);
         let n_sub1 = n.saturating_sub(1);
@@ -155,6 +158,9 @@ impl<K: Key, E: Fn(&[u8; GCM_BLK_SIZE], &K) -> [u8; GCM_BLK_SIZE]> AEAD for GCM<
 
     fn decrypt(&self, ciphertext: &Self::Input, iv: &Self::Input) -> Self::Output {
         type T = LeIntArr<u32, OPQAUE_UINT_LEN>;
+        if ciphertext.len() == 0 {
+            return Vec::new();
+        }
         let mut plaintext: Vec<u8> = Vec::with_capacity(ciphertext.len());
         let n = ciphertext.len().div_ceil(GCM_BLK_SIZE);
         let n_sub1 = n.saturating_sub(1);
