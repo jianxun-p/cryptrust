@@ -1,8 +1,8 @@
-use std::mem::size_of;
-
 use num_traits::{FromBytes, ToBytes};
 
-use crate::{cipher::*, finite_field::le_int_arr::OpaqueUintTrait, key::Key};
+use crate::{cipher::*, finite_field::primuint_traits::PrimUint};
+
+use crate::key::Key;
 
 /// size of a row of a block used in AES block cipher
 const BLK_ROW_SIZE: usize = 4;
@@ -14,7 +14,8 @@ const BLK_COL_SIZE: usize = 4;
 const BLK_SIZE: usize = BLK_ROW_SIZE * BLK_COL_SIZE;
 
 /// implementation of AES in u32 words
-const WORD_SIZE: usize = size_of::<u32>();
+const U32_SIZE: usize = (u32::BITS / u8::BITS) as usize;
+const WORD_SIZE: usize = (u32::BITS / u8::BITS) as usize;
 
 /// Substitution values used in the SubBytes() transformation of the AES algorithm
 const S_BOX: [u8; 256] = [
@@ -63,7 +64,7 @@ const AES_MODULO_POLYNOMIAL_COEF: u32 = 0b100011011;
 struct State([u32; BLK_ROW_SIZE]);
 
 #[derive(Debug)]
-pub struct AES<K: Key>(K);
+pub struct AES<const SIZE: usize, K: Key<SIZE>>(K);
 
 fn get_byte(word: u32, n: usize) -> u8 {
     ((word >> (n * u8::BITS as usize)) as u32 & (u8::MAX as u32)) as u8
@@ -345,16 +346,13 @@ macro_rules! aes_key {
             }
         }
 
-        impl Key for $key {
+        impl Key<$key_size> for $key {
             const SIZE: usize = $key_size;
             fn from_slice(data: &[u8]) -> Self {
                 let mut key_bytes = [0u8; $key_size];
                 let mid = data.len().min($key_size);
                 for i in 0..mid {
                     key_bytes[i] = data[i];
-                }
-                for i in mid..$key_size {
-                    key_bytes[i] = rand::random();
                 }
                 Self::from_ne_bytes(&key_bytes)
             }
@@ -364,7 +362,7 @@ macro_rules! aes_key {
 
 macro_rules! impl_aes {
     ($k:ty, $key_size:expr, $nr:expr) => {
-        impl AES<$k> {
+        impl AES<$key_size, $k> {
             /// Implementation of the KeyExpansion routine used in the AES algorithm to generate a key schedule
             /// See Section 5.2 of "FIPS 197, Advanced Encryption Standard (AES)" for more details
             fn key_expansion(key: &$k) -> [u32; BLK_SIZE * ($nr + 1) / WORD_SIZE] {
@@ -376,8 +374,8 @@ macro_rules! impl_aes {
                 // "first Nk words of the expanded key are filled with the Cipher Key"
                 for i in 0..NK {
                     // w[i] = net_to_host_endian<32>(reinterpret_cast<const uint32_t *>(key)[i]);
-                    let (begin, end) = (i * size_of::<u32>(), (i + 1) * size_of::<u32>());
-                    w[i] = <u32 as OpaqueUintTrait>::from_be_bytes(&key_bytes[begin..end]);
+                    let (begin, end) = (i * U32_SIZE, (i + 1) * U32_SIZE);
+                    w[i] = <u32 as PrimUint>::from_be_bytes(&key_bytes[begin..end]);
                 }
 
                 let mut rcon_i: u32 = 0x00800000;
@@ -398,7 +396,7 @@ macro_rules! impl_aes {
             }
         }
 
-        impl Cipher<$k> for AES<$k> {
+        impl Cipher<$key_size, $k> for AES<$key_size, $k> {
             type Input = [u8; BLK_SIZE];
             type Output = [u8; BLK_SIZE];
 
@@ -460,13 +458,13 @@ macro_rules! impl_aes {
             }
         }
 
-        impl BlockCipher<$k, BLK_SIZE> for AES<$k> {}
+        impl BlockCipher<$key_size, $k, BLK_SIZE> for AES<$key_size, $k> {}
     };
 }
 
 macro_rules! impl_aes_helper {
     ($k:ty) => {
-        impl_aes!($k, <$k>::SIZE, <$k>::SIZE / WORD_SIZE + 6);
+        impl_aes!($k, {<$k>::SIZE}, <$k>::SIZE / WORD_SIZE + 6);
     };
 }
 
@@ -478,9 +476,9 @@ impl_aes_helper!(AES128Key);
 impl_aes_helper!(AES192Key);
 impl_aes_helper!(AES256Key);
 
-pub type AES128 = AES<AES128Key>;
-pub type AES192 = AES<AES192Key>;
-pub type AES256 = AES<AES256Key>;
+pub type AES128 = AES<16, AES128Key>;
+pub type AES192 = AES<24, AES192Key>;
+pub type AES256 = AES<32, AES256Key>;
 
 #[cfg(test)]
 mod test {

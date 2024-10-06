@@ -1,6 +1,6 @@
 use crate::key::Key;
 
-pub trait Cipher<K: Key> {
+pub trait Cipher<const KEY_SIZE: usize, K: Key<KEY_SIZE>> {
     type Input: AsRef<[u8]> + ?Sized;
     type Output: AsRef<[u8]>;
     fn encrypt(plaintext: &Self::Input, key: &K) -> Self::Output;
@@ -8,8 +8,8 @@ pub trait Cipher<K: Key> {
 }
 
 #[cfg(feature = "block_cipher")]
-pub trait BlockCipher<K: Key, const BLK_SIZE: usize>:
-    Cipher<K, Input = [u8; BLK_SIZE], Output = [u8; BLK_SIZE]>
+pub trait BlockCipher<const KEY_SIZE: usize, K: Key<KEY_SIZE>, const BLK_SIZE: usize>:
+    Cipher<KEY_SIZE, K, Input = [u8; BLK_SIZE], Output = [u8; BLK_SIZE]>
 {
 }
 
@@ -29,10 +29,10 @@ pub trait AEAD {
     ) -> Self::Output;
 }
 
-#[cfg(feature = "block_cipher")]
+#[cfg(all(feature = "aes", feature = "block_cipher"))]
 mod aes;
 
-#[cfg(feature = "block_cipher")]
+#[cfg(feature = "aes")]
 pub use aes::{AES128Key, AES192Key, AES256Key, AES128, AES192, AES256};
 
 #[cfg(feature = "aead")]

@@ -1,19 +1,20 @@
-use num_traits::{CheckedAdd, CheckedSub, ConstZero, Inv};
 
-use crate::finite_field::prime_field::le_int_arr::OpaqueUintTrait;
-
-use super::le_int_arr::LeIntArr;
 
 #[test]
-fn test_le_int_arr() {
-    let a: LeIntArr<u8, 2> = LeIntArr::from_word(2);
-    assert_eq!(a + a.neg(), LeIntArr::ZERO);
+fn test_uint_arr() {
+    use super::{*, uint_arr::UintArr};
+    use num_traits::{Pow, ConstZero};
+    type T = UintArr<u8, 2, 2>;
+    let a = T::from_word(2);
+    assert_eq!(a + a.neg(), T::ZERO);
+    let b = T::from_word(2);
+    assert_eq!(b.pow(3), b * b * b);
 }
 
 #[test]
 fn test_eq() {
-    use super::*;
-    type T = LeIntArr<u8, 2>;
+    use super::{*, uint_arr::UintArr, pfint::PFInt, ffint::FiniteFieldIntTrait};
+    type T = UintArr<u8, 2, 2>;
     let field1_bytes: [u8; 2] = [61, 0]; // (mod 61)
     let a_bytes: [u8; 2] = [2, 0]; // 2
     let b_bytes: [u8; 2] = [63, 0]; // 63
@@ -26,8 +27,9 @@ fn test_eq() {
 
 #[test]
 fn test_add_sub() {
-    use super::*;
-    type T = LeIntArr<u8, 2>;
+    use super::{*, uint_arr::UintArr, pfint::PFInt, ffint::FiniteFieldIntTrait};
+    use num_traits::{CheckedAdd, CheckedSub};
+    type T = UintArr<u8, 2, 2>;
 
     let field1_bytes: [u8; 2] = [79, 145]; // (mod 37199)
     let field2_bytes: [u8; 2] = [61, 0]; // (mod 61)
@@ -67,8 +69,8 @@ fn test_add_sub() {
 
 #[test]
 fn test_double() {
-    use super::*;
-    type T = LeIntArr<u8, 2>;
+    use super::{*, uint_arr::UintArr, pfint::PFInt, ffint::FiniteFieldIntTrait};
+    type T = UintArr<u8, 2, 2>;
 
     let field1_bytes: [u8; 2] = [61, 0]; // (mod 61)
     let a_bytes: [u8; 2] = [2, 0]; // 2
@@ -95,8 +97,8 @@ fn test_double() {
 
 #[test]
 fn test_mul() {
-    use super::*;
-    type T = LeIntArr<u8, 2>;
+    use super::{*, uint_arr::UintArr, pfint::PFInt, ffint::FiniteFieldIntTrait};
+    type T = UintArr<u8, 2, 2>;
 
     let field1_bytes: [u8; 2] = [61, 0]; // (mod 61)
     let field2_be_bytes: [u8; 56] = [
@@ -128,25 +130,25 @@ fn test_mul() {
         0x86, 0x23, 0xed, 0xdc, 0xf7, 0x12, 0xe0, 0xfc, 0x1c, 0xf1, 0x13,
     ];
     let field1 = PrimeField::<T>::from_le_bytes(&field1_bytes);
-    let field2 = PrimeField::<LeIntArr<u8, 56>>::from_be_bytes(&field2_be_bytes);
+    let field2 = PrimeField::<UintArr<u8, 56, 56>>::from_be_bytes(&field2_be_bytes);
     let a = PFInt::<T>::from_le_bytes(&a_bytes, &field1);
     let b = PFInt::<T>::from_le_bytes(&b_bytes, &field1);
     let c = PFInt::<T>::from_le_bytes(&c_bytes, &field1);
     let d = PFInt::<T>::from_le_bytes(&d_bytes, &field1);
-    let e = PFInt::<LeIntArr<u8, 56>>::from_be_bytes(&e_be_bytes, &field2);
-    let f = PFInt::<LeIntArr<u8, 56>>::from_be_bytes(&f_be_bytes, &field2);
-    let g = PFInt::<LeIntArr<u8, 56>>::from_be_bytes(&g_be_bytes, &field2);
+    let e = PFInt::<UintArr<u8, 56, 56>>::from_be_bytes(&e_be_bytes, &field2);
+    let f = PFInt::<UintArr<u8, 56, 56>>::from_be_bytes(&f_be_bytes, &field2);
+    let g = PFInt::<UintArr<u8, 56, 56>>::from_be_bytes(&g_be_bytes, &field2);
 
     assert_eq!(a.clone() * b.clone(), c.clone()); // 2 * 3 = 6 (mod 61)
     assert_eq!(c * d, a + b); // 6 * 11 = 66 = 5 = 2 + 3 (mod 61)
-    dbg!(field2, e, f, g);
     assert_eq!(e * f, g);
 }
 
 #[test]
 fn test_modinv() {
-    use super::*;
-    type T = LeIntArr<u8, 2>;
+    use super::{*, uint_arr::UintArr, pfint::PFInt, ffint::FiniteFieldIntTrait};
+    use num_traits::Inv;
+    type T = UintArr<u8, 2, 2>;
 
     let field1_bytes: [u8; 2] = [61, 0]; // (mod 61)
     let a_bytes: [u8; 2] = [2, 0]; // 2
@@ -166,4 +168,17 @@ fn test_modinv() {
     assert_eq!(c.inv(), PFInt::<T>::new(&field1, T::from_word(51)));
     assert_eq!(d.inv(), PFInt::<T>::new(&field1, T::from_word(50)));
     assert_eq!(e.inv(), PFInt::<T>::new(&field1, T::from_word(11)));
+}
+
+#[test]
+fn test_pow() {
+    use super::{*, uint_arr::UintArr, pfint::PFInt, ffint::FiniteFieldIntTrait};
+    use num_traits::{ConstZero, ConstOne, Pow};
+    type T = UintArr<u8, 2, 2>;
+    let field1 = PrimeField::<T>::from_be_bytes(&[0, 5]);
+    let a = PFInt::<T>::from_be_bytes(&[0, 2], &field1);
+    let k3 = <T as FromBytes>::from_be_bytes(&[0, 3]);
+    assert_eq!(a.pow(T::ZERO), PFInt::<T>::one(&field1));
+    assert_eq!(a.pow(T::ONE), a);
+    assert_eq!(a.pow(k3), a * a * a);
 }

@@ -1,23 +1,20 @@
 use num_traits::{FromBytes, ToBytes};
-use rand::random;
 
 use crate::{
-    ecc::{common_curves::curve448, FFEllipticCurveTrait, PFInt}, finite_field::{
-        ffint::{FFInt, FiniteFieldIntTrait},
-        le_int_arr::ToByteArr,
-    }, key::{Key, PrivateKey, PublicKey, SharedSecret}, key_exchange::KeyExchangeTrait
+    key::*, ecc::{common_curves::curve448, FFEllipticCurveTrait, PFInt}, finite_field::ffint::{FFInt, FiniteFieldIntTrait},
 };
+use super::*;
 
 pub struct X448();
 
 #[derive(Debug, Clone, Copy)]
-pub struct X448PrivKey(FFInt<'static, curve448::OpaqueInt>);
+pub struct X448PrivKey(FFInt<'static, curve448::OpaqueUint>);
 
 #[derive(Debug, Clone, Copy)]
-pub struct X448PubKey(PFInt<'static, curve448::OpaqueInt>);
+pub struct X448PubKey(PFInt<'static, curve448::OpaqueUint>);
 
 #[derive(PartialEq, Debug, Clone, Copy)]
-pub struct X448SharedKey(PFInt<'static, curve448::OpaqueInt>);
+pub struct X448SharedKey(PFInt<'static, curve448::OpaqueUint>);
 
 impl FromBytes for X448PrivKey {
     type Bytes = [u8; curve448::SIZE];
@@ -28,7 +25,7 @@ impl FromBytes for X448PrivKey {
         encoded[0] |= 0x80;
         Self(FFInt::from_be_bytes(
             &encoded,
-            curve448::curve448_finite_field(),
+            &curve448::CURVE448_FINITE_FIELD,
         ))
     }
 
@@ -38,7 +35,7 @@ impl FromBytes for X448PrivKey {
         encoded[curve448::SIZE - 1] |= 0x80;
         Self(FFInt::from_le_bytes(
             &encoded,
-            curve448::curve448_finite_field(),
+            &curve448::CURVE448_FINITE_FIELD,
         ))
     }
 }
@@ -61,14 +58,14 @@ impl FromBytes for X448PubKey {
     fn from_be_bytes(bytes: &Self::Bytes) -> Self {
         Self(PFInt::from_be_bytes(
             bytes,
-            curve448::curve448_prime_field(),
+            &curve448::CURVE448_PRIME_FIELD,
         ))
     }
 
     fn from_le_bytes(bytes: &Self::Bytes) -> Self {
         Self(PFInt::from_le_bytes(
             bytes,
-            curve448::curve448_prime_field(),
+            &curve448::CURVE448_PRIME_FIELD,
         ))
     }
 }
@@ -91,14 +88,14 @@ impl FromBytes for X448SharedKey {
     fn from_be_bytes(bytes: &Self::Bytes) -> Self {
         Self(PFInt::from_be_bytes(
             bytes,
-            curve448::curve448_prime_field(),
+            &curve448::CURVE448_PRIME_FIELD,
         ))
     }
 
     fn from_le_bytes(bytes: &Self::Bytes) -> Self {
         Self(PFInt::from_le_bytes(
             bytes,
-            curve448::curve448_prime_field(),
+            &curve448::CURVE448_PRIME_FIELD,
         ))
     }
 }
@@ -115,7 +112,7 @@ impl ToBytes for X448SharedKey {
     }
 }
 
-impl Key for X448PrivKey {
+impl Key<{curve448::SIZE}> for X448PrivKey {
     const SIZE: usize = curve448::SIZE;
     fn from_slice(data: &[u8]) -> Self {
         let mut key_bytes = [0u8; curve448::SIZE];
@@ -123,14 +120,11 @@ impl Key for X448PrivKey {
         for i in 0..mid {
             key_bytes[i] = data[i];
         }
-        for i in mid..curve448::SIZE {
-            key_bytes[i] = random();
-        }
         Self::from_ne_bytes(&key_bytes)
     }
 }
 
-impl Key for X448PubKey {
+impl Key<{curve448::SIZE}> for X448PubKey {
     const SIZE: usize = curve448::SIZE;
     fn from_slice(data: &[u8]) -> Self {
         let mut key_bytes = [0u8; curve448::SIZE];
@@ -138,14 +132,11 @@ impl Key for X448PubKey {
         for i in 0..mid {
             key_bytes[i] = data[i];
         }
-        for i in mid..curve448::SIZE {
-            key_bytes[i] = random();
-        }
         Self::from_ne_bytes(&key_bytes)
     }
 }
 
-impl Key for X448SharedKey {
+impl Key<{curve448::SIZE}> for X448SharedKey {
     const SIZE: usize = curve448::SIZE;
     fn from_slice(data: &[u8]) -> Self {
         let mut key_bytes = [0u8; curve448::SIZE];
@@ -153,36 +144,28 @@ impl Key for X448SharedKey {
         for i in 0..mid {
             key_bytes[i] = data[i];
         }
-        for i in mid..curve448::SIZE {
-            key_bytes[i] = random();
-        }
         Self::from_ne_bytes(&key_bytes)
     }
 }
 
-impl PrivateKey for X448PrivKey {
-    fn rand() -> Self {
-        let key_bytes = [0u8; curve448::SIZE].map(|_| random::<u8>());
-        Self::from_ne_bytes(&key_bytes)
-    }
-}
+impl PrivateKey<{curve448::SIZE}> for X448PrivKey {}
 
-impl PublicKey for X448PubKey {}
+impl PublicKey<{curve448::SIZE}> for X448PubKey {}
 
-impl SharedSecret for X448SharedKey {}
+impl SharedSecret<{curve448::SIZE}> for X448SharedKey {}
 
-impl KeyExchangeTrait<X448PrivKey, X448PubKey, X448SharedKey> for X448 {
+impl KeyExchangeTrait<{curve448::SIZE}, X448PrivKey, X448PubKey, X448SharedKey> for X448 {
 
     fn shared_secret(private_key: X448PrivKey, public_key: X448PubKey) -> X448SharedKey {
         use curve448::*;
-        let p = curve448().new_point(public_key.0);
-        let shared = curve448().point_mul(&p, private_key.0);
+        let p = CURVE448.new_point(public_key.0);
+        let shared = CURVE448.point_mul(&p, private_key.0);
         X448SharedKey(shared.point)
     }
     
     fn public_key(private_key: &X448PrivKey) -> X448PubKey {
         use curve448::*;
-        let public_key = curve448().point_mul(curve448_generator(), private_key.0);
+        let public_key = CURVE448.point_mul(&CURVE448_GENERATOR, private_key.0);
         X448PubKey(public_key.point)
     }
 }
@@ -194,7 +177,7 @@ mod test {
     #[test]
     fn x448_x_dbl_test() {
         use super::*;
-        use curve448::curve448_prime_field;
+        use curve448::*;
         let u: [u8; 56] = [
             0x06, 0xfc, 0xe6, 0x40, 0xfa, 0x34, 0x87, 0xbf, 0xda, 0x5f, 0x6c, 0xf2, 0xd5, 0x26,
             0x3f, 0x8a, 0xad, 0x88, 0x33, 0x4c, 0xbd, 0x07, 0x43, 0x7f, 0x02, 0x0f, 0x08, 0xf9,
@@ -213,11 +196,11 @@ mod test {
             0x5b, 0x6a, 0x89, 0xee, 0x24, 0xae, 0x7b, 0xd2, 0xba, 0x04, 0x80, 0x1d, 0x71, 0xfa,
             0x78, 0xca, 0xc7, 0xfb, 0x5f, 0x2c, 0xe9, 0x4c, 0x97, 0x30, 0x93, 0x99, 0xd5, 0xc8,
         ];
-        let u_i = PFInt::from_le_bytes(&u, curve448_prime_field());
-        let ans_x_i = PFInt::from_be_bytes(&ans_x, curve448_prime_field());
-        let ans_z_i = PFInt::from_be_bytes(&ans_z, curve448_prime_field());
-        let one_i = PFInt::one(curve448_prime_field());
-        let (x, z) = curve448().x_dbl((u_i, one_i));
+        let u_i = PFInt::from_le_bytes(&u, &CURVE448_PRIME_FIELD);
+        let ans_x_i = PFInt::from_be_bytes(&ans_x, &CURVE448_PRIME_FIELD);
+        let ans_z_i = PFInt::from_be_bytes(&ans_z, &CURVE448_PRIME_FIELD);
+        let one_i = PFInt::one(&CURVE448_PRIME_FIELD);
+        let (x, z) = CURVE448.x_dbl((u_i, one_i));
         assert_eq!(x, ans_x_i);
         assert_eq!(z, ans_z_i);
     }

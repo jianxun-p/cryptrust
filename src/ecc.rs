@@ -1,5 +1,3 @@
-use num_traits::ToBytes;
-
 pub mod common_curves;
 pub mod montgomery;
 pub mod point;
@@ -12,9 +10,9 @@ pub mod weistrass;
 pub use common_curves::*;
 use point::*;
 
-use crate::finite_field::{ffint::*, le_int_arr::OpaqueUintTrait};
+pub(self) use crate::finite_field::{ffint::*, uint_arr::UintArrTrait};
 
-pub trait FFEllipticCurveTrait<'a, T: OpaqueUintTrait>: PartialEq + Clone + Copy {
+pub trait FFEllipticCurveTrait<'a, T: UintArrTrait>: PartialEq + Clone + Copy {
     type Point: ECPointTrait<'a>;
     fn point_zero(&'a self) -> Self::Point;
     fn point_add(&'a self, p: &Self::Point, q: &Self::Point) -> Self::Point;

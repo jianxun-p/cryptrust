@@ -2,13 +2,13 @@
 fn montgomery_ladder_test1() {
     // https://x25519.xargs.org/
     use super::*;
-
-    let k = FFInt::one(curve25519_subgroup_order());
+    
+    let k = FFInt::one(&CURVE25519_SUBGROUP_ORDER);
 
     // 0x0000000000000000000000000000000000000000000000000000000000000009
-    let p = curve25519_generator();
+    let p = &CURVE25519_GENERATOR;
 
-    assert_eq!(curve25519().point_mul(curve25519_generator(), k), *p);
+    assert_eq!(CURVE25519.point_mul(&CURVE25519_GENERATOR, k), *p);
 }
 
 #[test]
@@ -17,7 +17,7 @@ fn montgomery_ladder_test2() {
     use super::*;
 
     // k = 2
-    let k = FFInt::one(curve25519_subgroup_order()).double();
+    let k = FFInt::one(&CURVE25519_SUBGROUP_ORDER).double();
 
     // 0x20d342d51873f1b7d9750c687d1571148f3f5ced1e350b5c5cae469cdd684efb
     // 14847277145635483483963372537557091634710985132825781088887140890597596352251
@@ -29,8 +29,8 @@ fn montgomery_ladder_test2() {
 
     // left: 1553958396437841
     assert_eq!(
-        curve25519().point_mul(curve25519_generator(), k),
-        curve25519().new_point(PFInt::from_be_bytes(&p, curve25519_prime_field()))
+        CURVE25519.point_mul(&CURVE25519_GENERATOR, k),
+        CURVE25519.new_point(PFInt::from_be_bytes(&p, &CURVE25519_PRIME_FIELD))
     );
 }
 
@@ -40,15 +40,15 @@ fn montgomery_ladder_test3() {
     use super::*;
 
     // k = 4
-    let k = FFInt::one(curve25519_subgroup_order()).double().double();
+    let k = FFInt::one(&CURVE25519_SUBGROUP_ORDER).double().double();
     let p: [u8; 32] = [
         0x79, 0xce, 0x98, 0xb7, 0xe0, 0x68, 0x9d, 0x7d, 0xe7, 0xd1, 0xd0, 0x74, 0xa1, 0x5b, 0x31,
         0x5f, 0xfe, 0x18, 0x05, 0xdf, 0xcd, 0x5d, 0x2a, 0x23, 0x0f, 0xee, 0x85, 0xe4, 0x55, 0x00,
         0x13, 0xef,
     ];
     assert_eq!(
-        curve25519().point_mul(curve25519_generator(), k),
-        curve25519().new_point(PFInt::from_be_bytes(&p, curve25519_prime_field()))
+        CURVE25519.point_mul(&CURVE25519_GENERATOR, k),
+        CURVE25519.new_point(PFInt::from_be_bytes(&p, &CURVE25519_PRIME_FIELD))
     );
 }
 
@@ -62,15 +62,15 @@ fn montgomery_ladder_test4() {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x3a,
     ];
-    let k = FFInt::from_be_bytes(&k_be_bytes, curve25519_subgroup_order());
+    let k = FFInt::from_be_bytes(&k_be_bytes, &CURVE25519_SUBGROUP_ORDER);
     let p: [u8; 32] = [
         0x53, 0x6c, 0x01, 0xd5, 0xc2, 0xbe, 0x45, 0xba, 0x9d, 0x7d, 0x93, 0x41, 0xed, 0x8a, 0xa0,
         0xca, 0x0b, 0xec, 0x3e, 0x2c, 0x8a, 0x51, 0x5c, 0x35, 0xa0, 0x0b, 0xdc, 0x0c, 0x6e, 0xac,
         0x87, 0x20,
     ];
     assert_eq!(
-        curve25519().point_mul(curve25519_generator(), k),
-        curve25519().new_point(PFInt::from_be_bytes(&p, curve25519_prime_field()))
+        CURVE25519.point_mul(&CURVE25519_GENERATOR, k),
+        CURVE25519.new_point(PFInt::from_be_bytes(&p, &CURVE25519_PRIME_FIELD))
     );
 }
 
@@ -84,15 +84,15 @@ fn montgomery_ladder_test5() {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x0d, 0x80,
     ];
-    let k = FFInt::from_be_bytes(&k_be_bytes, curve25519_subgroup_order());
+    let k = FFInt::from_be_bytes(&k_be_bytes, &CURVE25519_SUBGROUP_ORDER);
     let p: [u8; 32] = [
         0x69, 0x81, 0x16, 0x14, 0xc7, 0xa9, 0xae, 0x23, 0xe9, 0x4b, 0x26, 0x3d, 0x11, 0xc1, 0x50,
         0xcf, 0x53, 0x0b, 0x98, 0x26, 0xde, 0x04, 0x41, 0x48, 0x2c, 0xf6, 0x24, 0xf8, 0xd3, 0xc0,
         0x6c, 0x8d,
     ];
     assert_eq!(
-        curve25519().point_mul(curve25519_generator(), k),
-        curve25519().new_point(PFInt::from_be_bytes(&p, curve25519_prime_field()))
+        CURVE25519.point_mul(&CURVE25519_GENERATOR, k),
+        CURVE25519.new_point(PFInt::from_be_bytes(&p, &CURVE25519_PRIME_FIELD))
     );
 }
 
@@ -106,14 +106,14 @@ fn montgomery_ladder_test6() {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x10,
     ];
-    let k = FFInt::from_be_bytes(&k_be_bytes, curve25519_subgroup_order());
+    let k = FFInt::from_be_bytes(&k_be_bytes, &CURVE25519_SUBGROUP_ORDER);
     let p: [u8; 32] = [
         0x02, 0xdf, 0x4e, 0xc7, 0x96, 0x1b, 0xb9, 0xd7, 0xb1, 0x5c, 0x0c, 0x5d, 0xbc, 0x42, 0xe6,
         0x8c, 0xc6, 0xef, 0x44, 0xed, 0x32, 0xf5, 0x4e, 0xda, 0xf3, 0x9a, 0xfb, 0xbb, 0xc7, 0xf8,
         0x20, 0x8d,
     ];
     assert_eq!(
-        curve25519().point_mul(curve25519_generator(), k),
-        curve25519().new_point(PFInt::from_be_bytes(&p, curve25519_prime_field()))
+        CURVE25519.point_mul(&CURVE25519_GENERATOR, k),
+        CURVE25519.new_point(PFInt::from_be_bytes(&p, &CURVE25519_PRIME_FIELD))
     );
 }

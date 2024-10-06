@@ -1,12 +1,12 @@
 use super::{point::*, FFEllipticCurveTrait, FFInt};
 use crate::finite_field::{
-    ffint::FiniteFieldIntTrait, le_int_arr::OpaqueUintTrait, pfint::PFInt, PrimeField,
+    ffint::FiniteFieldIntTrait, uint_arr::UintArrTrait, pfint::PFInt, PrimeField,
 };
 use num_traits::Inv;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 /// Bv^2 = u^3 + Au^2 + u
-pub struct MontgomeryCurve<'a, T: OpaqueUintTrait> {
+pub struct MontgomeryCurve<'a, T: UintArrTrait> {
     a: PFInt<'a, T>,
     b: PFInt<'a, T>,
     prime_field: &'a PrimeField<T>,
@@ -14,14 +14,14 @@ pub struct MontgomeryCurve<'a, T: OpaqueUintTrait> {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 /// Bv^2 = u^3 + Au^2 + u
-pub struct CompressedMontgomeryCurve<'a, T: OpaqueUintTrait> {
+pub struct CompressedMontgomeryCurve<'a, T: UintArrTrait> {
     a: PFInt<'a, T>,
     b: PFInt<'a, T>,
     prime_field: &'a PrimeField<T>,
 }
 
-impl<'a, T: OpaqueUintTrait> CompressedMontgomeryCurve<'a, T> {
-    pub fn new(a: PFInt<'a, T>, b: PFInt<'a, T>, prime_field: &'a PrimeField<T>) -> Self {
+impl<'a, T: UintArrTrait> CompressedMontgomeryCurve<'a, T> {
+    pub const fn new(a: PFInt<'a, T>, b: PFInt<'a, T>, prime_field: &'a PrimeField<T>) -> Self {
         Self {
             a: a,
             b: b,
@@ -29,7 +29,7 @@ impl<'a, T: OpaqueUintTrait> CompressedMontgomeryCurve<'a, T> {
         }
     }
 
-    pub fn new_point(&'a self, x: PFInt<'a, T>) -> FFECCompressedProjPoint<'a, Self, T> {
+    pub const fn new_point(&'a self, x: PFInt<'a, T>) -> FFECCompressedProjPoint<'a, Self, T> {
         FFECCompressedProjPoint {
             curve: self,
             point: x,
@@ -114,24 +114,20 @@ impl<'a, T: OpaqueUintTrait> CompressedMontgomeryCurve<'a, T> {
 
         let p_infinity = (PFInt::one(self.prime_field), PFInt::zero(self.prime_field));
         let k_is_zero = k.is_zero();
-
-        // if k_is_zero {
-        //     return (p_infinity, g);
-        // }
         let (mut x0, mut x1) = (self.x_dbl(g), g);
         let k_uint = k.to_opaqueuint();
         let bit_iter = (0..FFInt::<T>::bits())
             .rev()
-            .skip_while(|i| k_uint.bit(*i).unwrap() == false)
+            .skip_while(|i| k_uint.bit(*i) == false)
             .skip(1);
         for i in bit_iter {
             (x0, x1) = Self::swap_points(
-                k_uint.bit(i).unwrap() ^ k_uint.bit(i + 1).unwrap(),
+                k_uint.bit(i) ^ k_uint.bit(i + 1),
                 (x0, x1),
             );
             (x0, x1) = (self.x_dbl(x0), self.x_add(x0, x1, g));
         }
-        (x0, x1) = Self::swap_points(k_uint.bit(0).unwrap(), (x0, x1));
+        (x0, x1) = Self::swap_points(k_uint.bit(0), (x0, x1));
         (x0, x1) = (
             Self::swap_points(k_is_zero, (x0, p_infinity)).0,
             Self::swap_points(k_is_zero, (x1, g)).0,
@@ -140,7 +136,7 @@ impl<'a, T: OpaqueUintTrait> CompressedMontgomeryCurve<'a, T> {
     }
 }
 
-impl<'a, T: OpaqueUintTrait> FFEllipticCurveTrait<'a, T> for CompressedMontgomeryCurve<'a, T> {
+impl<'a, T: UintArrTrait> FFEllipticCurveTrait<'a, T> for CompressedMontgomeryCurve<'a, T> {
     type Point = FFECCompressedProjPoint<'a, Self, T>;
 
     fn point_zero(&'a self) -> Self::Point {
@@ -172,7 +168,7 @@ impl<'a, T: OpaqueUintTrait> FFEllipticCurveTrait<'a, T> for CompressedMontgomer
     }
 }
 
-impl<'a, T: OpaqueUintTrait> FFEllipticCurveTrait<'a, T> for MontgomeryCurve<'a, T> {
+impl<'a, T: UintArrTrait> FFEllipticCurveTrait<'a, T> for MontgomeryCurve<'a, T> {
     type Point = FFECProjectivePoint<'a, Self, T>;
 
     fn point_zero(&'a self) -> Self::Point {

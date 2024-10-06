@@ -1,30 +1,34 @@
 /// See https://csrc.nist.rip/groups/ST/toolkit/BCM/documents/proposedmodes/gcm/gcm-spec.pdf
 use std::ops::{Add, Mul};
 
-use num_traits::{ConstOne, ConstZero, Euclid, ToBytes};
+use num_traits::{ConstZero, Euclid, FromBytes, ToBytes};
 
-use crate::{ecc::LeIntArr, finite_field::le_int_arr::OpaqueUintTrait, key::Key};
+use crate::finite_field::uint_arr::{UintArr, UintArrTrait, arr_len};
 
 use super::*;
 
 /// GCM works with blocks of 16 bytes
 pub const GCM_BLK_SIZE: usize = 16;
 
-type Word = u32;
-const OPQAUE_UINT_LEN: usize = GCM_BLK_SIZE / std::mem::size_of::<Word>();
+type WORD = u32;
+// const OPQAUE_UINT_LEN: usize = GCM_BLK_SIZE / (Word::BITS / u8::BITS) as usize;
+
+type OpaqueUint = UintArr<WORD, {arr_len::<WORD>(GCM_BLK_SIZE)}, GCM_BLK_SIZE>;
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
-struct GcmBlk(LeIntArr<Word, OPQAUE_UINT_LEN>);
+struct GcmBlk(OpaqueUint);
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 struct GcmCounter(GcmBlk);
 
 #[derive(Debug)]
-pub struct GCM<K: Key, E: Fn(&[u8; GCM_BLK_SIZE], &K) -> [u8; GCM_BLK_SIZE]> {
+pub struct GCM<const KEY_SIZE: usize, const TAG_SIZE: usize, K, E> 
+    where K: Key<KEY_SIZE>, 
+        E: Fn(&[u8; GCM_BLK_SIZE], &K) -> [u8; GCM_BLK_SIZE],
+{
     key: K,
     encrypt_fn: E,
     h: GcmBlk,
-    tag_len: usize,
 }
 
 impl Add for GcmBlk {
@@ -38,18 +42,17 @@ impl Mul for GcmBlk {
     type Output = GcmBlk;
 
     fn mul(self, y: Self) -> Self::Output {
-        /// note that the data should be treated as bit strings in little-endian
-        type T = LeIntArr<Word, OPQAUE_UINT_LEN>;
+        // note that the data should be treated as bit strings in little-endian
+        type T = OpaqueUint;
         let mut r_bytes = [0u8; GCM_BLK_SIZE];
         r_bytes[0] = 0b11100001;
         let r = T::from_be_bytes(&r_bytes);
         let (mut z, mut v) = (T::ZERO, self.0);
-        let bits: usize = T::size() * u8::BITS as usize; // 128
-        for i in 0..bits {
-            let yi = y.0.bit(bits - i - 1).unwrap_or(false);
+        for i in 0..T::BITS {
+            let yi = y.0.bit(T::BITS - i - 1);
             z = z ^ (v & T::bit_to_mask(yi));
-            let v_high_bit = v.bit(0).unwrap_or(false);
-            let v_shr1 = v.div_euclid(&T::ONE.overflowing_double().0);
+            let v_high_bit = v.bit(0);
+            let v_shr1 = v.div_euclid(&T::TWO);
             v = v_shr1 ^ (r & T::bit_to_mask(v_high_bit));
         }
         GcmBlk(z)
@@ -60,30 +63,33 @@ impl GcmCounter {
     fn new(init_vec_be: &[u8], h: &GcmBlk) -> Self {
         match init_vec_be.len() == 12 {
             true => {
-                let mut le_int_arr = [0u8; GCM_BLK_SIZE];
+                let mut uint_arr = [0u8; GCM_BLK_SIZE];
                 for i in 0..init_vec_be.len() {
-                    le_int_arr[i] = init_vec_be[i];
+                    uint_arr[i] = init_vec_be[i];
                 }
-                le_int_arr[GCM_BLK_SIZE - 1] = 1;
-                Self(GcmBlk(LeIntArr::from_be_bytes(le_int_arr.as_slice())))
+                uint_arr[GCM_BLK_SIZE - 1] = 1;
+                Self(GcmBlk(UintArr::from_be_bytes(uint_arr.as_slice())))
             }
             false => Self(ghash(h, &[], init_vec_be)),
         }
     }
 
     fn inc(self) -> Self {
-        let mut le_int_arr = self.0 .0.to_le_bytes();
-        let counter_bytes = [le_int_arr[0], le_int_arr[1], le_int_arr[2], le_int_arr[3]];
+        let mut uint_arr = self.0 .0.to_le_bytes();
+        let counter_bytes = [uint_arr[0], uint_arr[1], uint_arr[2], uint_arr[3]];
         let counter = u32::from_le_bytes(counter_bytes).wrapping_add(1);
-        [le_int_arr[0], le_int_arr[1], le_int_arr[2], le_int_arr[3]] = counter.to_le_bytes();
-        Self(GcmBlk(LeIntArr::from_le_bytes(le_int_arr.as_slice())))
+        [uint_arr[0], uint_arr[1], uint_arr[2], uint_arr[3]] = counter.to_le_bytes();
+        Self(GcmBlk(UintArr::from_le_bytes(uint_arr.as_slice())))
     }
 }
 
-impl<K: Key, E: Fn(&[u8; GCM_BLK_SIZE], &K) -> [u8; GCM_BLK_SIZE]> GCM<K, E> {
+impl<const KEY_SIZE: usize, const TAG_SIZE: usize, K, E> GCM<KEY_SIZE, TAG_SIZE, K, E> 
+    where K: Key<KEY_SIZE>,
+        E: Fn(&[u8; GCM_BLK_SIZE], &K) -> [u8; GCM_BLK_SIZE],
+{
 
     fn encrypted_y0(&self, iv: &[u8], h: &GcmBlk) -> GcmBlk {
-        type T = LeIntArr<u32, OPQAUE_UINT_LEN>;
+        type T = OpaqueUint;
         let y0_blk = GcmCounter::new(&iv, h);
         let y0_vec = y0_blk.0.0.to_be_bytes();
         let mut y0_bytes = [0u8; GCM_BLK_SIZE];
@@ -94,19 +100,18 @@ impl<K: Key, E: Fn(&[u8; GCM_BLK_SIZE], &K) -> [u8; GCM_BLK_SIZE]> GCM<K, E> {
     }
 
     pub fn new(key: K, encrypt_fn: E) -> Self {
-        type T = LeIntArr<u32, OPQAUE_UINT_LEN>;
+        type T = OpaqueUint;
         let h_bytes = encrypt_fn(&[0u8; GCM_BLK_SIZE], &key);
         let h = GcmBlk(T::from_be_bytes(&h_bytes));
         Self {
             key: key,
             encrypt_fn: encrypt_fn,
             h: h,
-            tag_len: GCM_BLK_SIZE,
         }
     }
 
     fn compute_encrypted_counters(&self, n: usize, mut counter: GcmCounter) -> Vec<GcmBlk> {
-        type T = LeIntArr<u32, OPQAUE_UINT_LEN>;
+        type T = OpaqueUint;
         let mut encrypted_counter = Vec::with_capacity(n);
         for _i in 0..n {
             counter = counter.inc();
@@ -124,7 +129,9 @@ impl<K: Key, E: Fn(&[u8; GCM_BLK_SIZE], &K) -> [u8; GCM_BLK_SIZE]> GCM<K, E> {
 
 }
 
-impl<K: Key, E: Fn(&[u8; GCM_BLK_SIZE], &K) -> [u8; GCM_BLK_SIZE]> AEAD for GCM<K, E> {
+impl<const KEY_SIZE: usize, const TAG_SIZE: usize, K: Key<KEY_SIZE>, E> AEAD for GCM<KEY_SIZE, TAG_SIZE, K, E> 
+    where E: Fn(&[u8; GCM_BLK_SIZE], &K) -> [u8; GCM_BLK_SIZE]
+{
     type Input = [u8];
 
     type AAD = [u8];
@@ -134,7 +141,7 @@ impl<K: Key, E: Fn(&[u8; GCM_BLK_SIZE], &K) -> [u8; GCM_BLK_SIZE]> AEAD for GCM<
     type Authentication = Vec<u8>;
 
     fn encrypt(&self, plaintext: &Self::Input, iv: &Self::Input) -> Self::Output {
-        type T = LeIntArr<u32, OPQAUE_UINT_LEN>;
+        type T = OpaqueUint;
         if plaintext.len() == 0 {
             return Vec::new();
         }
@@ -157,7 +164,7 @@ impl<K: Key, E: Fn(&[u8; GCM_BLK_SIZE], &K) -> [u8; GCM_BLK_SIZE]> AEAD for GCM<
     }
 
     fn decrypt(&self, ciphertext: &Self::Input, iv: &Self::Input) -> Self::Output {
-        type T = LeIntArr<u32, OPQAUE_UINT_LEN>;
+        type T = OpaqueUint;
         if ciphertext.len() == 0 {
             return Vec::new();
         }
@@ -185,12 +192,12 @@ impl<K: Key, E: Fn(&[u8; GCM_BLK_SIZE], &K) -> [u8; GCM_BLK_SIZE]> AEAD for GCM<
         iv: &[u8],
         aad: &[u8],
     ) -> Vec<u8> {
-        let mut auth: Vec<u8> = Vec::with_capacity(self.tag_len);
+        let mut auth: Vec<u8> = Vec::with_capacity(TAG_SIZE);
         auth.extend_from_slice(
             &ghash(&self.h, aad, ciphertext)
                 .add(self.encrypted_y0(iv, &self.h))
                 .0
-                .to_be_bytes()[..self.tag_len],
+                .to_be_bytes()[..TAG_SIZE],
         );
         auth
     }
@@ -198,7 +205,7 @@ impl<K: Key, E: Fn(&[u8; GCM_BLK_SIZE], &K) -> [u8; GCM_BLK_SIZE]> AEAD for GCM<
 }
 
 fn ghash_helper(mut x: GcmBlk, h: &GcmBlk, a: &[u8]) -> GcmBlk {
-    type T = LeIntArr<Word, OPQAUE_UINT_LEN>;
+    type T = OpaqueUint;
     let m = a.len().div_ceil(GCM_BLK_SIZE);
     let m_sub1 = m.saturating_sub(1);
     let v = a.len() - m_sub1 * GCM_BLK_SIZE;
@@ -224,15 +231,15 @@ fn ghash_helper(mut x: GcmBlk, h: &GcmBlk, a: &[u8]) -> GcmBlk {
 ///
 /// The function GHASH is defined by GHASH(H, A, C) = Xm+n+1, where the inputs A and C are
 fn ghash(h: &GcmBlk, a: &[u8], c: &[u8]) -> GcmBlk {
-    type T = LeIntArr<Word, OPQAUE_UINT_LEN>;
-    let mut x = ghash_helper(GcmBlk(LeIntArr::ZERO), h, a);
+    type T = OpaqueUint;
+    let mut x = ghash_helper(GcmBlk(UintArr::ZERO), h, a);
     x = ghash_helper(x, h, c);
     let (len_a, len_c) = (
         a.len() as u64 * u8::BITS as u64,
         c.len() as u64 * u8::BITS as u64,
     );
     let len_ac = {
-        const LEN_SIZE: usize = std::mem::size_of::<u64>();
+        const LEN_SIZE: usize = (u64::BITS / u8::BITS) as usize;
         let len_a_bytes = len_a.to_be_bytes();
         let len_c_bytes = len_c.to_be_bytes();
         let mut tmp = [0u8; 2 * LEN_SIZE];
@@ -253,8 +260,7 @@ mod test {
 
     #[test]
     fn gcmblk_mul_test1() {
-        use crate::finite_field::le_int_arr::OpaqueUintTrait;
-        type T = LeIntArr<Word, OPQAUE_UINT_LEN>;
+        type T = OpaqueUint;
         let a: [u8; 16] = [
             0x03, 0x88, 0xda, 0xce, 0x60, 0xb6, 0xa3, 0x92, 0xf3, 0x28, 0xc2, 0xb9, 0x71, 0xb2,
             0xfe, 0x78,
@@ -998,7 +1004,7 @@ mod test {
 }
 
 
-pub type Aes128Gcm = GCM<AES128Key, fn(&[u8; GCM_BLK_SIZE], &AES128Key) -> [u8; GCM_BLK_SIZE]>;
-pub type Aes192Gcm = GCM<AES192Key, fn(&[u8; GCM_BLK_SIZE], &AES192Key) -> [u8; GCM_BLK_SIZE]>;
-pub type Aes256Gcm = GCM<AES256Key, fn(&[u8; GCM_BLK_SIZE], &AES256Key) -> [u8; GCM_BLK_SIZE]>;
+pub type Aes128Gcm = GCM<{AES128Key::SIZE}, GCM_BLK_SIZE, AES128Key, fn(&[u8; GCM_BLK_SIZE], &AES128Key) -> [u8; GCM_BLK_SIZE]>;
+pub type Aes192Gcm = GCM<{AES192Key::SIZE}, GCM_BLK_SIZE, AES192Key, fn(&[u8; GCM_BLK_SIZE], &AES192Key) -> [u8; GCM_BLK_SIZE]>;
+pub type Aes256Gcm = GCM<{AES256Key::SIZE}, GCM_BLK_SIZE, AES256Key, fn(&[u8; GCM_BLK_SIZE], &AES256Key) -> [u8; GCM_BLK_SIZE]>;
 

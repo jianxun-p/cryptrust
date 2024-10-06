@@ -1,20 +1,16 @@
-use std::sync::OnceLock;
-
 pub use num_traits::FromBytes;
 
-pub use crate::finite_field::{le_int_arr::LeIntArr, pfint::PFInt, FiniteField, PrimeField};
+pub use crate::finite_field::{uint_arr::{UintArr, WORD, arr_len}, pfint::PFInt, FiniteField, PrimeField};
 
-use super::{montgomery::CompressedMontgomeryCurve, FFECCompressedProjPoint, FiniteFieldIntTrait};
-
-use std::mem::size_of;
+use super::{montgomery::CompressedMontgomeryCurve, FFECCompressedProjPoint};
 
 pub(crate) mod curve25519 {
+
     use super::*;
 
     pub(crate) const SIZE: usize = 32;
-    type Word = u64;
-    pub(crate) type OpaqueInt = LeIntArr<Word, { SIZE / size_of::<Word>() }>;
-    type Curve = CompressedMontgomeryCurve<'static, OpaqueInt>;
+    pub(crate) type OpaqueUint = UintArr<WORD, {arr_len::<WORD>(SIZE)}, SIZE>;
+    type Curve = CompressedMontgomeryCurve<'static, OpaqueUint>;
 
     const CURVE25519_PRIME_BE_BYTES: [u8; SIZE] = [
         0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
@@ -53,60 +49,49 @@ pub(crate) mod curve25519 {
         0x00, 0x14, 0xde, 0xf9, 0xde, 0xa2, 0xf7, 0x9c, 0xd6, 0x58, 0x12, 0x63, 0x1a, 0x5c, 0xf5,
         0xd3, 0xed,
     ];
+    
 
-    static CURVE25519_PRIME_FIELD: OnceLock<PrimeField<OpaqueInt>> = OnceLock::new();
-    pub fn curve25519_prime_field() -> &'static PrimeField<OpaqueInt> {
-        CURVE25519_PRIME_FIELD.get_or_init(|| PrimeField::from_be_bytes(&CURVE25519_PRIME_BE_BYTES))
-    }
+    pub static CURVE25519_PRIME_FIELD: PrimeField<OpaqueUint> = PrimeField::<OpaqueUint>::const_from_opaqueuint(
+        OpaqueUint::const_from_be_bytes(CURVE25519_PRIME_BE_BYTES)
+    );
 
-    static CURVE25519_FINITE_FIELD: OnceLock<FiniteField<OpaqueInt>> = OnceLock::new();
-    pub fn curve25519_finite_field() -> &'static FiniteField<OpaqueInt> {
-        CURVE25519_FINITE_FIELD
-            .get_or_init(|| FiniteField::from_be_bytes(&CURVE25519_PRIME_BE_BYTES))
-    }
+    pub static CURVE25519_FINITE_FIELD: FiniteField<OpaqueUint> = FiniteField::<OpaqueUint>::const_from_opaqueuint(
+        OpaqueUint::const_from_be_bytes(CURVE25519_PRIME_BE_BYTES)
+    );
+    
+    static CURVE25519_A: PFInt<'static, OpaqueUint> = PFInt::<'static, OpaqueUint>::const_from_opaqueuint(
+        OpaqueUint::const_from_be_bytes(CURVE25519_A_BE_BYTES),
+        &CURVE25519_PRIME_FIELD
+    );
 
-    static CURVE25519_A: OnceLock<PFInt<OpaqueInt>> = OnceLock::new();
-    fn curve25519_a() -> &'static PFInt<'static, OpaqueInt> {
-        CURVE25519_A
-            .get_or_init(|| PFInt::from_be_bytes(&CURVE25519_A_BE_BYTES, curve25519_prime_field()))
-    }
+    static CURVE25519_B: PFInt<'static, OpaqueUint> = PFInt::<'static, OpaqueUint>::const_from_opaqueuint(
+        OpaqueUint::const_from_be_bytes(CURVE25519_B_BE_BYTES),
+        &CURVE25519_PRIME_FIELD
+    );
+    
+    pub static CURVE25519: Curve = Curve::new(CURVE25519_A, CURVE25519_B, &CURVE25519_PRIME_FIELD);
 
-    static CURVE25519_B: OnceLock<PFInt<OpaqueInt>> = OnceLock::new();
-    fn curve25519_b() -> &'static PFInt<'static, OpaqueInt> {
-        CURVE25519_B
-            .get_or_init(|| PFInt::from_be_bytes(&CURVE25519_B_BE_BYTES, curve25519_prime_field()))
-    }
+    static CURVE25519_GENERATOR_OPAQUEINT: OpaqueUint = OpaqueUint::const_from_be_bytes(CURVE25519_GENERATOR_BE_BYTES.0);
 
-    static CURVE25519: OnceLock<Curve> = OnceLock::new();
-    pub fn curve25519() -> &'static Curve {
-        CURVE25519
-            .get_or_init(|| Curve::new(*curve25519_a(), *curve25519_b(), curve25519_prime_field()))
-    }
-    static CURVE25519_GENERATOR: OnceLock<FFECCompressedProjPoint<'static, Curve, OpaqueInt>> =
-        OnceLock::new();
-    pub fn curve25519_generator() -> &'static FFECCompressedProjPoint<'static, Curve, OpaqueInt> {
-        CURVE25519_GENERATOR.get_or_init(|| {
-            curve25519().new_point(PFInt::from_be_bytes(
-                &CURVE25519_GENERATOR_BE_BYTES.0,
-                curve25519_prime_field(),
-            ))
-        })
-    }
+    pub static CURVE25519_GENERATOR: FFECCompressedProjPoint<'static, Curve, OpaqueUint> = CURVE25519.new_point(
+        PFInt::<'static, OpaqueUint>::const_from_opaqueuint(
+            CURVE25519_GENERATOR_OPAQUEINT, 
+            &CURVE25519_PRIME_FIELD
+        )
+    );
 
-    static CURVE25519_SUBGROUP_ORDER: OnceLock<FiniteField<OpaqueInt>> = OnceLock::new();
-    pub fn curve25519_subgroup_order() -> &'static FiniteField<OpaqueInt> {
-        CURVE25519_SUBGROUP_ORDER
-            .get_or_init(|| FiniteField::from_be_bytes(&CURVE25519_SUBGROUP_ORDER_BE_BYTES))
-    }
+    pub static CURVE25519_SUBGROUP_ORDER: FiniteField<OpaqueUint> = FiniteField::<OpaqueUint>::const_from_opaqueuint(
+        OpaqueUint::const_from_be_bytes(CURVE25519_SUBGROUP_ORDER_BE_BYTES)
+    );
+    
 }
 
 pub(crate) mod curve448 {
     use super::*;
 
     pub(crate) const SIZE: usize = 56;
-    type Word = u64;
-    pub(crate) type OpaqueInt = LeIntArr<Word, { SIZE / size_of::<Word>() }>;
-    type Curve = CompressedMontgomeryCurve<'static, OpaqueInt>;
+    pub(crate) type OpaqueUint = UintArr<WORD, {arr_len::<WORD>(SIZE)}, SIZE>;
+    type Curve = CompressedMontgomeryCurve<'static, OpaqueUint>;
 
     const CURVE448_PRIME_BE_BYTES: [u8; SIZE] = [
         0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
@@ -153,57 +138,45 @@ pub(crate) mod curve448 {
         0x3a, 0x70, 0xaa, 0xdc, 0x87, 0x3d, 0x6d, 0x54, 0xa7, 0xbb, 0x0d,
     ];
 
-    static CURVE448_PRIME_FIELD: OnceLock<PrimeField<OpaqueInt>> = OnceLock::new();
-    pub fn curve448_prime_field() -> &'static PrimeField<OpaqueInt> {
-        CURVE448_PRIME_FIELD.get_or_init(|| PrimeField::from_be_bytes(&CURVE448_PRIME_BE_BYTES))
-    }
+    pub static CURVE448_PRIME_FIELD: PrimeField<OpaqueUint> = PrimeField::<OpaqueUint>::const_from_opaqueuint(
+        OpaqueUint::const_from_be_bytes(CURVE448_PRIME_BE_BYTES)
+    );
 
-    static CURVE448_FINITE_FIELD: OnceLock<FiniteField<OpaqueInt>> = OnceLock::new();
-    pub fn curve448_finite_field() -> &'static FiniteField<OpaqueInt> {
-        CURVE448_FINITE_FIELD.get_or_init(|| FiniteField::from_be_bytes(&CURVE448_PRIME_BE_BYTES))
-    }
+    pub static CURVE448_FINITE_FIELD: FiniteField<OpaqueUint> = FiniteField::<OpaqueUint>::const_from_opaqueuint(
+        OpaqueUint::const_from_be_bytes(CURVE448_PRIME_BE_BYTES)
+    );
 
-    static CURVE448_A: OnceLock<PFInt<OpaqueInt>> = OnceLock::new();
-    fn curve448_a() -> &'static PFInt<'static, OpaqueInt> {
-        CURVE448_A
-            .get_or_init(|| PFInt::from_be_bytes(&CURVE448_A_BE_BYTES, curve448_prime_field()))
-    }
+    static CURVE448_A: PFInt<'static, OpaqueUint> = PFInt::<'static, OpaqueUint>::const_from_opaqueuint(
+        OpaqueUint::const_from_be_bytes(CURVE448_A_BE_BYTES),
+        &CURVE448_PRIME_FIELD,
+    );
 
-    static CURVE448_B: OnceLock<PFInt<OpaqueInt>> = OnceLock::new();
-    fn curve448_b() -> &'static PFInt<'static, OpaqueInt> {
-        CURVE448_B
-            .get_or_init(|| PFInt::from_be_bytes(&CURVE448_B_BE_BYTES, curve448_prime_field()))
-    }
+    static CURVE448_B: PFInt<'static, OpaqueUint> = PFInt::<'static, OpaqueUint>::const_from_opaqueuint(
+        OpaqueUint::const_from_be_bytes(CURVE448_B_BE_BYTES),
+        &CURVE448_PRIME_FIELD,
+    );
 
-    static CURVE448: OnceLock<Curve> = OnceLock::new();
-    pub fn curve448() -> &'static Curve {
-        CURVE448.get_or_init(|| Curve::new(*curve448_a(), *curve448_b(), curve448_prime_field()))
-    }
+    pub static CURVE448: Curve = Curve::new(CURVE448_A, CURVE448_B, &CURVE448_PRIME_FIELD);
 
-    static CURVE448_GENERATOR: OnceLock<FFECCompressedProjPoint<'static, Curve, OpaqueInt>> =
-        OnceLock::new();
-    pub fn curve448_generator() -> &'static FFECCompressedProjPoint<'static, Curve, OpaqueInt> {
-        CURVE448_GENERATOR.get_or_init(|| {
-            curve448().new_point(PFInt::from_be_bytes(
-                &CURVE448_GENERATOR_BE_BYTES.0,
-                curve448_prime_field(),
-            ))
-        })
-    }
+    pub static CURVE448_GENERATOR: FFECCompressedProjPoint<'static, Curve, OpaqueUint> = CURVE448.new_point(
+        PFInt::<'static, OpaqueUint>::const_from_opaqueuint(
+            OpaqueUint::const_from_be_bytes(CURVE448_GENERATOR_BE_BYTES.0), 
+            &CURVE448_PRIME_FIELD,
+        )
+    );
 
-    static CURVE448_SUBGROUP_ORDER: OnceLock<FiniteField<OpaqueInt>> = OnceLock::new();
-    pub fn curve448_subgroup_order() -> &'static FiniteField<OpaqueInt> {
-        CURVE448_SUBGROUP_ORDER
-            .get_or_init(|| FiniteField::from_be_bytes(&CURVE448_SUBGROUP_ORDER_BE_BYTES))
-    }
+    pub static CURVE448_SUBGROUP_ORDER: FiniteField<OpaqueUint> = FiniteField::<OpaqueUint>::const_from_opaqueuint(
+        OpaqueUint::const_from_be_bytes(CURVE448_SUBGROUP_ORDER_BE_BYTES)
+    );
+
 }
 
 pub use curve25519::{
-    curve25519, curve25519_finite_field, curve25519_generator, curve25519_prime_field,
-    curve25519_subgroup_order,
+    CURVE25519, CURVE25519_FINITE_FIELD, CURVE25519_GENERATOR, CURVE25519_PRIME_FIELD,
+    CURVE25519_SUBGROUP_ORDER,
 };
 
 pub use curve448::{
-    curve448, curve448_finite_field, curve448_generator, curve448_prime_field,
-    curve448_subgroup_order,
+    CURVE448, CURVE448_FINITE_FIELD, CURVE448_GENERATOR, CURVE448_PRIME_FIELD,
+    CURVE448_SUBGROUP_ORDER,
 };

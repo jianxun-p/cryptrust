@@ -1,9 +1,5 @@
 .DS_Store
 .vscode
-.git
-
-*tmp*
-
+tmp
 *.lock
-*.bin
 target

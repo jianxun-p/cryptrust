@@ -1,23 +1,20 @@
 use num_traits::{FromBytes, ToBytes};
-use rand::random;
 
 use crate::{
-    ecc::{common_curves::curve25519, FFEllipticCurveTrait, PFInt}, finite_field::{
-        ffint::{FFInt, FiniteFieldIntTrait},
-        le_int_arr::ToByteArr,
-    }, key::{Key, PrivateKey, PublicKey, SharedSecret}, key_exchange::KeyExchangeTrait
+    key::*, ecc::{common_curves::curve25519, FFEllipticCurveTrait, PFInt}, finite_field::ffint::{FFInt, FiniteFieldIntTrait},
 };
+use super::*;
 
 pub struct X25519();
 
 #[derive(Debug, Clone, Copy)]
-pub struct X25519PrivKey(FFInt<'static, curve25519::OpaqueInt>);
+pub struct X25519PrivKey(FFInt<'static, curve25519::OpaqueUint>);
 
 #[derive(Debug, Clone, Copy)]
-pub struct X25519PubKey(PFInt<'static, curve25519::OpaqueInt>);
+pub struct X25519PubKey(PFInt<'static, curve25519::OpaqueUint>);
 
 #[derive(PartialEq, Debug, Clone, Copy)]
-pub struct X25519SharedKey(PFInt<'static, curve25519::OpaqueInt>);
+pub struct X25519SharedKey(PFInt<'static, curve25519::OpaqueUint>);
 
 impl FromBytes for X25519PrivKey {
     type Bytes = [u8; curve25519::SIZE];
@@ -29,7 +26,7 @@ impl FromBytes for X25519PrivKey {
         encoded[0] |= 0x40;
         Self(FFInt::from_be_bytes(
             &encoded,
-            curve25519::curve25519_finite_field(),
+            &curve25519::CURVE25519_FINITE_FIELD,
         ))
     }
 
@@ -41,7 +38,7 @@ impl FromBytes for X25519PrivKey {
 
         Self(FFInt::from_le_bytes(
             &encoded,
-            curve25519::curve25519_finite_field(),
+            &curve25519::CURVE25519_FINITE_FIELD,
         ))
     }
 }
@@ -66,7 +63,7 @@ impl FromBytes for X25519PubKey {
         encoded[0] &= 0b0111_1111;
         Self(PFInt::from_be_bytes(
             &encoded,
-            curve25519::curve25519_prime_field(),
+            &curve25519::CURVE25519_PRIME_FIELD,
         ))
     }
 
@@ -75,7 +72,7 @@ impl FromBytes for X25519PubKey {
         encoded[curve25519::SIZE - 1] &= 0b0111_1111;
         Self(PFInt::from_le_bytes(
             &encoded,
-            curve25519::curve25519_prime_field(),
+            &curve25519::CURVE25519_PRIME_FIELD,
         ))
     }
 }
@@ -98,14 +95,14 @@ impl FromBytes for X25519SharedKey {
     fn from_be_bytes(bytes: &Self::Bytes) -> Self {
         Self(PFInt::from_be_bytes(
             bytes,
-            curve25519::curve25519_prime_field(),
+            &curve25519::CURVE25519_PRIME_FIELD,
         ))
     }
 
     fn from_le_bytes(bytes: &Self::Bytes) -> Self {
         Self(PFInt::from_le_bytes(
             bytes,
-            curve25519::curve25519_prime_field(),
+            &curve25519::CURVE25519_PRIME_FIELD,
         ))
     }
 }
@@ -122,7 +119,7 @@ impl ToBytes for X25519SharedKey {
     }
 }
 
-impl Key for X25519PrivKey {
+impl Key<{curve25519::SIZE}> for X25519PrivKey {
     const SIZE: usize = curve25519::SIZE;
     fn from_slice(data: &[u8]) -> Self {
         let mut key_bytes = [0u8; curve25519::SIZE];
@@ -130,14 +127,11 @@ impl Key for X25519PrivKey {
         for i in 0..mid {
             key_bytes[i] = data[i];
         }
-        for i in mid..curve25519::SIZE {
-            key_bytes[i] = random();
-        }
         Self::from_ne_bytes(&key_bytes)
     }
 }
 
-impl Key for X25519PubKey {
+impl Key<{curve25519::SIZE}> for X25519PubKey {
     const SIZE: usize = curve25519::SIZE;
     fn from_slice(data: &[u8]) -> Self {
         let mut key_bytes = [0u8; curve25519::SIZE];
@@ -145,14 +139,11 @@ impl Key for X25519PubKey {
         for i in 0..mid {
             key_bytes[i] = data[i];
         }
-        for i in mid..curve25519::SIZE {
-            key_bytes[i] = random();
-        }
         Self::from_ne_bytes(&key_bytes)
     }
 }
 
-impl Key for X25519SharedKey {
+impl Key<{curve25519::SIZE}> for X25519SharedKey {
     const SIZE: usize = curve25519::SIZE;
     fn from_slice(data: &[u8]) -> Self {
         let mut key_bytes = [0u8; curve25519::SIZE];
@@ -160,36 +151,28 @@ impl Key for X25519SharedKey {
         for i in 0..mid {
             key_bytes[i] = data[i];
         }
-        for i in mid..curve25519::SIZE {
-            key_bytes[i] = random();
-        }
         Self::from_ne_bytes(&key_bytes)
     }
 }
 
-impl PrivateKey for X25519PrivKey {
-    fn rand() -> Self {
-        let key_bytes: [u8; curve25519::SIZE] = random();
-        Self::from_ne_bytes(&key_bytes)
-    }
-}
+impl PrivateKey<{curve25519::SIZE}> for X25519PrivKey {}
 
-impl PublicKey for X25519PubKey {}
+impl PublicKey<{curve25519::SIZE}> for X25519PubKey {}
 
-impl SharedSecret for X25519SharedKey {}
+impl SharedSecret<{curve25519::SIZE}> for X25519SharedKey {}
 
-impl KeyExchangeTrait<X25519PrivKey, X25519PubKey, X25519SharedKey> for X25519 {
+impl KeyExchangeTrait<{curve25519::SIZE}, X25519PrivKey, X25519PubKey, X25519SharedKey> for X25519 {
 
     fn shared_secret(private_key: X25519PrivKey, public_key: X25519PubKey) -> X25519SharedKey {
         use curve25519::*;
-        let p = curve25519().new_point(public_key.0);
-        let shared = curve25519().point_mul(&p, private_key.0);
+        let p = CURVE25519.new_point(public_key.0);
+        let shared = CURVE25519.point_mul(&p, private_key.0);
         X25519SharedKey(shared.point)
     }
     
     fn public_key(private_key: &X25519PrivKey) -> X25519PubKey {
         use curve25519::*;
-        let public_key = curve25519().point_mul(curve25519_generator(), private_key.0);
+        let public_key = CURVE25519.point_mul(&CURVE25519_GENERATOR, private_key.0);
         X25519PubKey(public_key.point)
     }
 }

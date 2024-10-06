@@ -1,20 +1,20 @@
 use num_traits::Inv;
 
 use crate::finite_field::{
-    ffint::FiniteFieldIntTrait, le_int_arr::OpaqueUintTrait, pfint::PFInt, PrimeField,
+    ffint::FiniteFieldIntTrait, pfint::PFInt, primuint_traits::PrimUint, uint_arr::UintArrTrait, PrimeField
 };
 
 use super::{point::*, *};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 /// y^2 = x^3 + Ax + B
-pub struct WeistrassCurve<'a, T: OpaqueUintTrait> {
+pub struct WeistrassCurve<'a, T: UintArrTrait> {
     a: PFInt<'a, T>,
     b: PFInt<'a, T>,
     prime_field: &'a PrimeField<T>,
 }
 
-impl<'a, T: OpaqueUintTrait> WeistrassCurve<'a, T> {
+impl<'a, T: UintArrTrait> WeistrassCurve<'a, T> {
     pub fn new(a: PFInt<'a, T>, b: PFInt<'a, T>, prime_field: &'a PrimeField<T>) -> Self {
         Self {
             a: a,
@@ -24,8 +24,8 @@ impl<'a, T: OpaqueUintTrait> WeistrassCurve<'a, T> {
     }
 
     pub fn new_point(&'a self, x: &[u8], y: &[u8]) -> FFECStandardPoint<'a, Self, T> {
-        let x_int: PFInt<T> = PFInt::from_le_bytes(x, self.prime_field);
-        let y_int: PFInt<T> = PFInt::from_le_bytes(y, self.prime_field);
+        let x_int: PFInt<T> = PFInt::<T>::from_le_bytes(x, self.prime_field);
+        let y_int: PFInt<T> = PFInt::<T>::from_le_bytes(y, self.prime_field);
         FFECStandardPoint {
             curve: self,
             point: ECPoint::Coordinate((x_int, y_int)),
@@ -53,11 +53,11 @@ impl<'a, T: OpaqueUintTrait> WeistrassCurve<'a, T> {
                 // therefore, exists an unique multiplicative inverse
                 let two: PFInt<T> = PFInt::new(
                     self.prime_field,
-                    T::from_word(<T::WORD>::from_le_bytes(&[2u8])),
+                    T::from_word(<T::WORD as PrimUint>::from_le_bytes(&[2u8])),
                 );
                 let three: PFInt<T> = PFInt::new(
                     self.prime_field,
-                    T::from_word(<T::WORD>::from_le_bytes(&[3u8])),
+                    T::from_word(<T::WORD as PrimUint>::from_le_bytes(&[3u8])),
                 );
                 let inv = (two * y1).inv();
                 let x1_sqr = x1 * x1;
@@ -75,7 +75,7 @@ impl<'a, T: OpaqueUintTrait> WeistrassCurve<'a, T> {
     }
 }
 
-impl<'a, T: OpaqueUintTrait> FFEllipticCurveTrait<'a, T> for WeistrassCurve<'a, T> {
+impl<'a, T: UintArrTrait> FFEllipticCurveTrait<'a, T> for WeistrassCurve<'a, T> {
     type Point = FFECStandardPoint<'a, Self, T>;
 
     fn point_add(&'a self, p: &Self::Point, q: &Self::Point) -> Self::Point {
@@ -139,8 +139,8 @@ impl<'a, T: OpaqueUintTrait> FFEllipticCurveTrait<'a, T> for WeistrassCurve<'a, 
 
         let mut q = p.clone();
         let mut ans: FFECStandardPoint<WeistrassCurve<T>, T> = self.point_zero();
-        for i in 0..T::bits() {
-            let bit: bool = n_bytes.bit(i).unwrap();
+        for i in 0..T::BITS {
+            let bit: bool = n_bytes.bit(i);
             let inc = [self.point_zero(), q];
             ans = self.point_add(&ans, &inc[bit as usize]);
             q = self.point_dbl(&q);
@@ -161,11 +161,11 @@ mod test {
     #[test]
     fn weierstrass_curve_test1() {
         use super::*;
-        use crate::finite_field::le_int_arr::LeIntArr;
+        use crate::finite_field::uint_arr::UintArr;
         use crate::finite_field::FiniteField;
         use num_traits::FromBytes;
         use std::pin::pin;
-        type T = LeIntArr<u8, 2>;
+        type T = UintArr<u8, 2, 2>;
         let pf_bytes: [u8; 2] = [17, 0];
         let pf = pin!(PrimeField::<T>::from_le_bytes(&pf_bytes));
         let a = PFInt::new(&pf, T::from_word(0));
